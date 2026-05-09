@@ -14,6 +14,7 @@ This plan outlines the steps taken to transform a raw text list into a structure
 ## Phase 3: Automation & Organization
 - [x] **Auto-Population**: Use web search (via sub-agent) to automatically fill in metadata for all 38+ items in the list.
 - [x] **Logical Sorting**: Group items by 'Type' to separate Movies from TV Shows for a cleaner browsing experience.
+- [x] **Project Documentation**: Create `README.md`, `GEMINI.md`, and `PLAN.md` to document project goals, standards, and history.
 
 ## Future Steps
 - [ ] **Status Updates**: Periodically update the 'Status' column as items are watched.
