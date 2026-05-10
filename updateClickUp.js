@@ -32,6 +32,7 @@ function parseMarkdown() {
 }
 
 async function getAllClickUpTasks() {
+  console.log('Fetching tasks...');
   let allTasks = [];
   let page = 0;
   let hasMore = true;
@@ -41,43 +42,37 @@ async function getAllClickUpTasks() {
     if (data.tasks.length < 100) hasMore = false;
     else page++;
   }
-  return new Map(allTasks.map(task => [task.name, task.id]));
+  console.log(`  Found ${allTasks.length} tasks in ClickUp.`);
+  return new Map(allTasks.map(task => [task.name.toLowerCase().trim(), task.id]));
 }
 
 async function getCustomFields() {
+  console.log('Fetching custom field definitions...');
   const { data } = await axios.get(`${API_URL}/list/${LIST_ID}/field`, { headers });
   return new Map(data.fields.map(field => [field.name, field]));
 }
 
-/**
- * Updates a single custom field for a task using the dedicated field endpoint.
- */
-async function setFieldValue(taskId, field, value) {
-    if (!value || value === 'N/A' || value === '') return;
+function getFieldValue(field, value) {
+    if (!value || value === 'N/A' || value === '') return null;
 
-    let payload = { value: value };
+    if (field.type === 'drop_down' || field.type === 'labels') {
+        const options = field.type_config.options || [];
+        const normalizedValue = value.toLowerCase().trim();
+        
+        const option = options.find(o => {
+            const label = (o.name || o.label || "").toLowerCase().trim();
+            return normalizedValue.includes(label) || label.includes(normalizedValue);
+        });
 
-    // Special handling for specific field types
-    if (field.type === 'drop_down') {
-        const option = field.type_config.options.find(o => o.name.toLowerCase() === value.toLowerCase());
-        if (!option) return console.warn(`      [SKIP] Option "${value}" not found for dropdown "${field.name}"`);
-        payload.value = option.id;
-    } else if (field.type === 'labels') {
-        // Labels usually expect an array of strings (the label names)
-        payload.value = [value];
+        if (!option) return null;
+        return (field.type === 'labels') ? [option.id] : option.id;
     } else if (field.type === 'number') {
-        const num = Number(value.split('–')[0].split('-')[0].replace(/[^0-9.]/g, ''));
-        if (isNaN(num)) return;
-        payload.value = num;
+        const match = value.match(/\d+/);
+        return match ? Number(match[0]) : null;
+    } else if (field.type === 'url' || field.type === 'short_text') {
+        return value;
     }
-
-    try {
-        await axios.post(`${API_URL}/field/${field.id}/task/${taskId}`, payload, { headers });
-        return true;
-    } catch (e) {
-        console.error(`      [FAIL] Field "${field.name}":`, e.response ? JSON.stringify(e.response.data) : e.message);
-        return false;
-    }
+    return null;
 }
 
 // --- MAIN EXECUTION ---
@@ -90,20 +85,16 @@ async function main() {
     const taskMap = await getAllClickUpTasks();
     const fieldMap = await getCustomFields();
 
-    console.log(`\n--- Processing ${markdownData.length} items ---`);
+    console.log(`\n--- Migrating to Custom Fields ---`);
 
     for (const item of markdownData) {
       const title = item['Title'];
-      const taskId = taskMap.get(title);
+      const taskId = taskMap.get(title.toLowerCase().trim());
 
-      if (!taskId) {
-        console.warn(`[MISSING] Task "${title}" not found in ClickUp.`);
-        continue;
-      }
+      if (!taskId) continue;
 
-      console.log(`[UPDATING] "${title}"...`);
-
-      const fieldsToUpdate = [
+      const customFieldsPayload = [];
+      const fieldsToProcess = [
           { name: 'Type', key: 'Type' },
           { name: 'Status', key: 'Status' },
           { name: 'Genre', key: 'Genre' },
@@ -115,16 +106,30 @@ async function main() {
           { name: 'Review link', key: 'Review link' }
       ];
 
-      for (const f of fieldsToUpdate) {
+      for (const f of fieldsToProcess) {
           const field = fieldMap.get(f.name);
           if (field) {
-              await setFieldValue(taskId, field, item[f.key]);
+              const val = getFieldValue(field, item[f.key]);
+              if (val !== null) {
+                  customFieldsPayload.push({ id: field.id, value: val });
+              }
           }
+      }
+
+      if (customFieldsPayload.length > 0) {
+        try {
+          await axios.put(`${API_URL}/task/${taskId}`, { custom_fields: customFieldsPayload }, { headers });
+          console.log(`[SUCCESS] Updated "${title}" (${customFieldsPayload.length} fields)`);
+        } catch (e) {
+          console.log(`[FAILED]  "${title}": ${e.message}`);
+        }
+      } else {
+        console.log(`[SKIPPED] "${title}" (No matching data found)`);
       }
     }
     console.log('\n--- Process Complete ---');
   } catch (error) {
-    console.error('CRITICAL ERROR:', error.response ? error.response.data : error.message);
+    console.error('CRITICAL ERROR:', error.message);
   }
 }
 
