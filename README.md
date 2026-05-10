@@ -27,3 +27,11 @@ The tracker is organized into the following columns to prioritize tracking and d
 - **Sorting**: The table is grouped by `Type` (Movies first, then TV Shows) for better organization.
 - **Commits**: This project follows the [Conventional Commits Specification](https://www.conventionalcommits.org/en/v1.0.0/).
 - **Formatting**: Keep table cells concise to avoid line wrapping in Markdown viewers.
+
+## Automation
+This project includes a Node.js script, `updateClickUp.js`, to automate the process of populating ClickUp custom fields from the `media-tracker.md` file.
+
+### Usage
+1.  **Install Dependencies**: Run `npm install axios`.
+2.  **Set API Token**: In your terminal, run `export CLICKUP_API_TOKEN="your_token"`, replacing `"your_token"` with your personal ClickUp API key.
+3.  **Execute**: Run the script with `node updateClickUp.js`.
