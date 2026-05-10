@@ -19,3 +19,6 @@ This plan outlines the steps taken to transform a raw text list into a structure
 ## Future Steps
 - [ ] **Status Updates**: Periodically update the 'Status' column as items are watched.
 - [ ] **Maintenance**: Add new titles to the tracker as they are discovered.
+
+## Phase 4: Interactive Migration
+- [x] **Migrate to ClickUp**: Transfer all 38+ media items from `media-tracker.md` to an interactive ClickUp list.
