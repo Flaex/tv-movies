@@ -35,3 +35,5 @@ This project includes a Node.js script, `updateClickUp.js`, to automate the proc
 1.  **Install Dependencies**: Run `npm install axios`.
 2.  **Set API Token**: In your terminal, run `export CLICKUP_API_TOKEN="your_token"`, replacing `"your_token"` with your personal ClickUp API key.
 3.  **Execute**: Run the script with `node updateClickUp.js`.
+
+**Note on Plan Limits**: Users on the ClickUp Free Forever plan may encounter a "Custom field usages exceeded" error during sync. The script handles this gracefully, but data will only be populated up to ClickUp's allowed usage limit.

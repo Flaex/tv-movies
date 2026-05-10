@@ -75,6 +75,17 @@ function getFieldValue(field, value) {
     return null;
 }
 
+async function createClickUpTask(name) {
+  try {
+    const { data } = await axios.post(`${API_URL}/list/${LIST_ID}/task`, { name }, { headers });
+    console.log(`[CREATED] Task "${name}"`);
+    return data.id;
+  } catch (e) {
+    console.error(`[FAILED]  Create "${name}": ${e.message}`);
+    return null;
+  }
+}
+
 // --- MAIN EXECUTION ---
 
 async function main() {
@@ -85,11 +96,17 @@ async function main() {
     const taskMap = await getAllClickUpTasks();
     const fieldMap = await getCustomFields();
 
-    console.log(`\n--- Migrating to Custom Fields ---`);
+    console.log(`\n--- Syncing Media to ClickUp ---`);
 
     for (const item of markdownData) {
       const title = item['Title'];
-      const taskId = taskMap.get(title.toLowerCase().trim());
+      if (!title) continue;
+
+      let taskId = taskMap.get(title.toLowerCase().trim());
+
+      if (!taskId) {
+        taskId = await createClickUpTask(title);
+      }
 
       if (!taskId) continue;
 
@@ -111,23 +128,32 @@ async function main() {
           if (field) {
               const val = getFieldValue(field, item[f.key]);
               if (val !== null) {
-                  customFieldsPayload.push({ id: field.id, value: val });
+                  try {
+                      // Using the dedicated field-specific endpoint which is more reliable
+                      const url = `${API_URL}/task/${taskId}/field/${field.id}`;
+                      const response = await axios.post(url, { value: val }, { headers });
+                      
+                      if (response.status === 200) {
+                          customFieldsPayload.push({ name: f.name, success: true });
+                      } else {
+                          console.log(`[WARN]    "${title}" -> ${f.name}: Unexpected status ${response.status}`);
+                      }
+                  } catch (e) {
+                      const errorData = e.response ? JSON.stringify(e.response.data) : e.message;
+                      console.log(`[FAILED]  "${title}" -> ${f.name}: ${errorData}`);
+                  }
               }
           }
       }
 
       if (customFieldsPayload.length > 0) {
-        try {
-          await axios.put(`${API_URL}/task/${taskId}`, { custom_fields: customFieldsPayload }, { headers });
-          console.log(`[SUCCESS] Updated "${title}" (${customFieldsPayload.length} fields)`);
-        } catch (e) {
-          console.log(`[FAILED]  "${title}": ${e.message}`);
-        }
+          console.log(`[SUCCESS] Synced "${title}" (${customFieldsPayload.length} fields)`);
       } else {
-        console.log(`[SKIPPED] "${title}" (No matching data found)`);
+          console.log(`[SKIPPED] "${title}" (No custom field data to sync)`);
       }
     }
-    console.log('\n--- Process Complete ---');
+    console.log('\n--- Sync Complete ---');
+    console.log(`\nNote: If you don't see the custom fields in ClickUp, ensure you have enabled the columns in your List View.`);
   } catch (error) {
     console.error('CRITICAL ERROR:', error.message);
   }
