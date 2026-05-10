@@ -21,8 +21,8 @@ const headers = {
 function parseMarkdown() {
   console.log(`Reading and parsing ${MARKDOWN_FILE}...`);
   const content = fs.readFileSync(MARKDOWN_FILE, 'utf-8');
-  const lines = content.trim().split('
-');
+  // Use String.fromCharCode(10) to avoid escaping issues with \n
+  const lines = content.trim().split(String.fromCharCode(10));
   const header = lines[0].trim().split('|').map(h => h.trim());
   const data = [];
 
@@ -113,8 +113,7 @@ async function main() {
     const clickUpTasks = await getClickUpTasks();
     const customFields = await getCustomFields();
 
-    console.log('
---- Starting to Update ClickUp Tasks ---');
+    console.log(String.fromCharCode(10) + '--- Starting to Update ClickUp Tasks ---');
 
     for (const item of markdownData) {
       const taskTitle = item['Title'];
@@ -137,8 +136,7 @@ async function main() {
       }
     }
 
-    console.log('
---- Update Process Complete ---');
+    console.log(String.fromCharCode(10) + '--- Update Process Complete ---');
 
   } catch (error) {
     console.error('An unexpected error occurred:');
