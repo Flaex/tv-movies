@@ -41,13 +41,37 @@ function parseMarkdown() {
 }
 
 /**
- * Fetches all tasks from the specified ClickUp list.
+ * Fetches ALL tasks from the specified ClickUp list (handles pagination).
  */
-async function getClickUpTasks() {
+async function getAllClickUpTasks() {
   console.log('Fetching tasks from ClickUp list...');
-  const { data } = await axios.get(`${API_URL}/list/${LIST_ID}/task`, { headers });
-  const taskMap = new Map(data.tasks.map(task => [task.name, task.id]));
-  console.log(`Found ${taskMap.size} tasks in the ClickUp list.`);
+  let allTasks = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data } = await axios.get(`${API_URL}/list/${LIST_ID}/task`, {
+      headers,
+      params: { page: page }
+    });
+    
+    allTasks = allTasks.concat(data.tasks);
+    console.log(`  Fetched page ${page}, total tasks so far: ${allTasks.length}`);
+    
+    if (data.tasks.length < 100 && data.last_page) { // Simplified check, or use 'last_page' if provided
+        hasMore = false;
+    } else if (data.tasks.length === 0) {
+        hasMore = false;
+    } else {
+        page++;
+    }
+    
+    // Safety break for extremely large lists in this context
+    if (page > 10) hasMore = false; 
+  }
+
+  const taskMap = new Map(allTasks.map(task => [task.name, task.id]));
+  console.log(`Total tasks found in ClickUp: ${taskMap.size}`);
   return taskMap;
 }
 
@@ -70,7 +94,7 @@ function mapDataToCustomFields(item, customFieldsMap) {
     const mapping = {
         'Type': item['Type'],
         'Genre': item['Genre'],
-        'Year': Number(item['Year'].split('–')[0]) || null, // Take the first year for ranges
+        'Year': Number(item['Year'].split('–')[0].split('-')[0]) || null, 
         'Rating': item['Rating'],
         'Streaming Platform': item['Streaming Platform'],
         'Seasons': Number(item['Seasons']) || null,
@@ -79,7 +103,7 @@ function mapDataToCustomFields(item, customFieldsMap) {
     };
 
     for (const [fieldName, fieldValue] of Object.entries(mapping)) {
-        if (customFieldsMap.has(fieldName) && fieldValue && fieldValue !== 'N/A') {
+        if (customFieldsMap.has(fieldName) && fieldValue && fieldValue !== 'N/A' && fieldValue !== '') {
             const field = customFieldsMap.get(fieldName);
             
             if (field.type === 'drop_down') {
@@ -89,6 +113,10 @@ function mapDataToCustomFields(item, customFieldsMap) {
                  } else {
                     console.warn(`  [WARN] Could not find dropdown option for "${fieldValue}" in field "${fieldName}"`);
                  }
+            } else if (field.type === 'labels') {
+                // For labels, we need to handle it as an array of IDs if multiple, but here we likely have one.
+                // We'll try setting the value directly if it's a simple label field.
+                payload.push({ id: field.id, value: [fieldValue] });
             } else {
                  payload.push({ id: field.id, value: fieldValue });
             }
@@ -103,14 +131,12 @@ function mapDataToCustomFields(item, customFieldsMap) {
 async function main() {
   if (!API_TOKEN) {
     console.error('ERROR: CLICKUP_API_TOKEN environment variable is not set.');
-    console.error('Please set it before running the script:');
-    console.error('export CLICKUP_API_TOKEN="your_token_here"');
     return;
   }
 
   try {
     const markdownData = parseMarkdown();
-    const clickUpTasks = await getClickUpTasks();
+    const clickUpTasks = await getAllClickUpTasks();
     const customFields = await getCustomFields();
 
     console.log(String.fromCharCode(10) + '--- Starting to Update ClickUp Tasks ---');
@@ -126,7 +152,7 @@ async function main() {
             await axios.put(`${API_URL}/task/${taskId}`, { custom_fields: customFieldsPayload }, { headers });
             console.log(`  [SUCCESS] Updated task: "${taskTitle}"`);
           } catch (e) {
-            console.error(`  [ERROR] Failed to update task "${taskTitle}":`, e.response ? e.response.data : e.message);
+            console.error(`  [ERROR] Failed to update task "${taskTitle}":`, e.response ? JSON.stringify(e.response.data) : e.message);
           }
         } else {
           console.log(`  [SKIP] No custom field data to update for "${taskTitle}"`);
